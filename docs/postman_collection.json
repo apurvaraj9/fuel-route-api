@@ -1,0 +1,108 @@
+{
+  "info": {
+    "name": "Fuel Route Planner API",
+    "description": "Requests for demonstrating the fuel route planner. Set the baseUrl variable to http://127.0.0.1:8000 locally or to the deployed URL.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" }
+  ],
+  "item": [
+    {
+      "name": "1. Long route: New York -> Los Angeles (multiple stops)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/route/?start=New York, NY&finish=Los Angeles, CA",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "route", ""],
+          "query": [
+            { "key": "start", "value": "New York, NY" },
+            { "key": "finish", "value": "Los Angeles, CA" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "2. Medium route (POST JSON): Chicago -> Dallas",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"start\": \"Chicago, IL\",\n  \"finish\": \"Dallas, TX\"\n}" },
+        "url": { "raw": "{{baseUrl}}/api/route/", "host": ["{{baseUrl}}"], "path": ["api", "route", ""] }
+      }
+    },
+    {
+      "name": "3. Short route: New York -> Philadelphia (no stop needed)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/route/?start=New York, NY&finish=Philadelphia, PA",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "route", ""],
+          "query": [
+            { "key": "start", "value": "New York, NY" },
+            { "key": "finish", "value": "Philadelphia, PA" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. Coordinates input: Houston -> Denver",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/route/?start=29.7604,-95.3698&finish=39.7392,-104.9903",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "route", ""],
+          "query": [
+            { "key": "start", "value": "29.7604,-95.3698" },
+            { "key": "finish", "value": "39.7392,-104.9903" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Error: location outside the USA",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/route/?start=48.8566,2.3522&finish=Dallas, TX",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "route", ""],
+          "query": [
+            { "key": "start", "value": "48.8566,2.3522" },
+            { "key": "finish", "value": "Dallas, TX" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Error: missing finish",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/route/?start=Dallas, TX",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "route", ""],
+          "query": [{ "key": "start", "value": "Dallas, TX" }]
+        }
+      }
+    },
+    {
+      "name": "7. Map page (open the URL in a browser)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/route/map/?start=New York, NY&finish=Los Angeles, CA",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "route", "map", ""],
+          "query": [
+            { "key": "start", "value": "New York, NY" },
+            { "key": "finish", "value": "Los Angeles, CA" }
+          ]
+        }
+      }
+    }
+  ]
+}

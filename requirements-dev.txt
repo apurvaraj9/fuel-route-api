@@ -1,0 +1,3 @@
+# Only needed to regenerate data/us_places.csv with `python manage.py build_places`.
+-r requirements.txt
+zipcodes==3.0.0

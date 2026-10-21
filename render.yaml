@@ -1,0 +1,17 @@
+# Render Blueprint (optional). The same settings can be entered by hand when
+# creating a free "Web Service" in the Render dashboard; see README "Deploying".
+services:
+  - type: web
+    name: fuel-route-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn config.wsgi --workers 2 --preload --timeout 60 --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"

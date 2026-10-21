@@ -1,0 +1,4 @@
+Django==6.1.2
+requests==2.34.2
+python-dotenv==1.2.3
+gunicorn==26.2.0; sys_platform != "win32"
