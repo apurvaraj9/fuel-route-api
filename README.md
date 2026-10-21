@@ -8,6 +8,12 @@ An API that takes a start and finish location in the USA and returns:
 
 using the supplied fuel-price CSV and a free routing API.
 
+**Live API:** <https://fuel-route-api-h6na.onrender.com/> (free Render instance: the first request after
+15 idle minutes takes about a minute while it wakes up)
+
+- Example: <https://fuel-route-api-h6na.onrender.com/api/route/?start=New%20York,%20NY&finish=Los%20Angeles,%20CA>
+- Map: <https://fuel-route-api-h6na.onrender.com/api/route/map/?start=New%20York,%20NY&finish=Los%20Angeles,%20CA>
+
 Built with **Django 6.1.2** (latest stable release at the time of writing), Python 3.12+.
 
 ---
@@ -39,7 +45,8 @@ python manage.py runserver
 Then open <http://127.0.0.1:8000/api/route/?start=New%20York,%20NY&finish=Los%20Angeles,%20CA>.
 
 No API key is needed: by default routes come from the public OSRM server.
-A Postman collection with demo requests is in `docs/postman_collection.json`.
+A Postman collection with demo requests is in `docs/postman_collection.json` (its `baseUrl`
+variable points to the live deployment; set it to `http://127.0.0.1:8000` for a local server).
 
 ---
 

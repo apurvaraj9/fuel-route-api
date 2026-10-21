@@ -1,11 +1,14 @@
 {
   "info": {
     "name": "Fuel Route Planner API",
-    "description": "Requests for demonstrating the fuel route planner. Set the baseUrl variable to http://127.0.0.1:8000 locally or to the deployed URL.",
+    "description": "Demo requests for the fuel route planner API. baseUrl points to the live deployment; change it to http://127.0.0.1:8000 to test a local server. The free Render instance sleeps after 15 minutes idle, so the first request can take about a minute.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://127.0.0.1:8000" }
+    {
+      "key": "baseUrl",
+      "value": "https://fuel-route-api-h6na.onrender.com"
+    }
   ],
   "item": [
     {
@@ -14,11 +17,23 @@
         "method": "GET",
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=New York, NY&finish=Los Angeles, CA",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "route", ""],
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ],
           "query": [
-            { "key": "start", "value": "New York, NY" },
-            { "key": "finish", "value": "Los Angeles, CA" }
+            {
+              "key": "start",
+              "value": "New York, NY"
+            },
+            {
+              "key": "finish",
+              "value": "Los Angeles, CA"
+            }
           ]
         }
       }
@@ -27,9 +42,27 @@
       "name": "2. Medium route (POST JSON): Chicago -> Dallas",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"start\": \"Chicago, IL\",\n  \"finish\": \"Dallas, TX\"\n}" },
-        "url": { "raw": "{{baseUrl}}/api/route/", "host": ["{{baseUrl}}"], "path": ["api", "route", ""] }
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"Chicago, IL\",\n  \"finish\": \"Dallas, TX\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/route/",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ]
+        }
       }
     },
     {
@@ -38,11 +71,23 @@
         "method": "GET",
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=New York, NY&finish=Philadelphia, PA",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "route", ""],
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ],
           "query": [
-            { "key": "start", "value": "New York, NY" },
-            { "key": "finish", "value": "Philadelphia, PA" }
+            {
+              "key": "start",
+              "value": "New York, NY"
+            },
+            {
+              "key": "finish",
+              "value": "Philadelphia, PA"
+            }
           ]
         }
       }
@@ -53,11 +98,23 @@
         "method": "GET",
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=29.7604,-95.3698&finish=39.7392,-104.9903",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "route", ""],
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ],
           "query": [
-            { "key": "start", "value": "29.7604,-95.3698" },
-            { "key": "finish", "value": "39.7392,-104.9903" }
+            {
+              "key": "start",
+              "value": "29.7604,-95.3698"
+            },
+            {
+              "key": "finish",
+              "value": "39.7392,-104.9903"
+            }
           ]
         }
       }
@@ -68,11 +125,23 @@
         "method": "GET",
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=48.8566,2.3522&finish=Dallas, TX",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "route", ""],
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ],
           "query": [
-            { "key": "start", "value": "48.8566,2.3522" },
-            { "key": "finish", "value": "Dallas, TX" }
+            {
+              "key": "start",
+              "value": "48.8566,2.3522"
+            },
+            {
+              "key": "finish",
+              "value": "Dallas, TX"
+            }
           ]
         }
       }
@@ -83,9 +152,20 @@
         "method": "GET",
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=Dallas, TX",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "route", ""],
-          "query": [{ "key": "start", "value": "Dallas, TX" }]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ],
+          "query": [
+            {
+              "key": "start",
+              "value": "Dallas, TX"
+            }
+          ]
         }
       }
     },
@@ -95,11 +175,24 @@
         "method": "GET",
         "url": {
           "raw": "{{baseUrl}}/api/route/map/?start=New York, NY&finish=Los Angeles, CA",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "route", "map", ""],
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            "map",
+            ""
+          ],
           "query": [
-            { "key": "start", "value": "New York, NY" },
-            { "key": "finish", "value": "Los Angeles, CA" }
+            {
+              "key": "start",
+              "value": "New York, NY"
+            },
+            {
+              "key": "finish",
+              "value": "Los Angeles, CA"
+            }
           ]
         }
       }
