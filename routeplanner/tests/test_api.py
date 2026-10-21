@@ -88,6 +88,8 @@ class RouteApiTests(SimpleTestCase):
         self.assertContains(response, "leaflet")
         self.assertContains(response, 'id="route-geojson"')
         self.assertContains(response, "Total fuel cost")
+        # OpenStreetMap tiles are refused without a Referer header.
+        self.assertEqual(response["Referrer-Policy"], "strict-origin-when-cross-origin")
 
     def test_validation_errors(self):
         fake = self._patch()

@@ -88,6 +88,11 @@ USE_I18N = False
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+# The map page loads OpenStreetMap tiles, whose usage policy requires a Referer
+# header. Django's default ("same-origin") sends none to other sites, so send
+# just the origin (no path or query string).
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 if env_bool("DJANGO_SECURE_PROXY_SSL_HEADER", bool(RENDER_EXTERNAL_HOSTNAME)):
