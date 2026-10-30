@@ -1,0 +1,17 @@
+[project]
+name = "fuel-route-api"
+version = "2.0.0"
+description = "Django API that plans a US route with the cheapest fuel stops."
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["routeplanner/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ"]
+ignore = ["DJ001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "routeplanner"]

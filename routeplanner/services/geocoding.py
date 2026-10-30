@@ -11,6 +11,7 @@ To keep calls to free external APIs to a minimum:
 
 So a typical request costs exactly 1 external call (the route).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -31,9 +32,21 @@ MAX_MILES_FROM_US_PLACE = 50.0
 _COORDS = re.compile(r"^\s*([-+]?\d{1,3}(?:\.\d+)?)\s*,\s*([-+]?\d{1,3}(?:\.\d+)?)\s*$")
 _COUNTRY_SUFFIX = re.compile(r",?\s*(USA|U\.S\.A\.|US|U\.S\.|UNITED STATES( OF AMERICA)?)\s*$", re.IGNORECASE)
 NON_US_REGIONS = {
-    "CANADA", "MEXICO", "ONTARIO", "QUEBEC", "BRITISH COLUMBIA", "ALBERTA", "MANITOBA", "SASKATCHEWAN",
-    "NOVA SCOTIA", "NEW BRUNSWICK", "NEWFOUNDLAND AND LABRADOR", "PRINCE EDWARD ISLAND", "YUKON",
-    "NORTHWEST TERRITORIES", "NUNAVUT",
+    "CANADA",
+    "MEXICO",
+    "ONTARIO",
+    "QUEBEC",
+    "BRITISH COLUMBIA",
+    "ALBERTA",
+    "MANITOBA",
+    "SASKATCHEWAN",
+    "NOVA SCOTIA",
+    "NEW BRUNSWICK",
+    "NEWFOUNDLAND AND LABRADOR",
+    "PRINCE EDWARD ISLAND",
+    "YUKON",
+    "NORTHWEST TERRITORIES",
+    "NUNAVUT",
 }
 _STATE_ZIP = re.compile(r"^(?P<state>[A-Za-z .]+?)\s+\d{5}(-\d{4})?$")
 
@@ -60,7 +73,7 @@ class ResolvedLocation:
 def resolve_location(raw, field: str) -> tuple[ResolvedLocation, int]:
     """Return (location, external_calls_made)."""
     if not isinstance(raw, str) or not raw.strip():
-        raise InvalidRequest(f"'{field}' is required, e.g. \"Dallas, TX\" or \"32.7767,-96.7970\".", field=field)
+        raise InvalidRequest(f'\'{field}\' is required, e.g. "Dallas, TX" or "32.7767,-96.7970".', field=field)
     query = " ".join(raw.split())
     if len(query) > MAX_QUERY_LENGTH:
         raise InvalidRequest(f"'{field}' is too long (max {MAX_QUERY_LENGTH} characters).", field=field)
@@ -118,7 +131,7 @@ def _from_gazetteer(query: str, field: str = "location") -> ResolvedLocation | N
 def _from_external_geocoder(query: str, field: str) -> tuple[ResolvedLocation, int]:
     use_ors = bool(settings.ORS_API_KEY)
     source = "openrouteservice_geocoder" if use_ors else "nominatim"
-    key = "geocode:v1:{}:{}".format(source, hashlib.sha256(query.lower().encode()).hexdigest())
+    key = f"geocode:v1:{source}:{hashlib.sha256(query.lower().encode()).hexdigest()}"
     cached = cache.get(key)
     calls = 0
     if cached is None:
@@ -126,19 +139,23 @@ def _from_external_geocoder(query: str, field: str) -> tuple[ResolvedLocation, i
         calls = 1
         cache.set(key, cached or {"not_found": True})
     if not cached or cached.get("not_found"):
-        raise LocationNotFound(f"Could not find '{query}' in the USA. Try \"City, ST\" or \"latitude,longitude\".",
-                               field=field)
+        raise LocationNotFound(
+            f'Could not find \'{query}\' in the USA. Try "City, ST" or "latitude,longitude".', field=field
+        )
     return ResolvedLocation(query, cached["label"], cached["lat"], cached["lon"], source), calls
 
 
 def _geocode_nominatim(query: str) -> dict | None:
     status, payload = request_json(
-        "GET", f"{settings.NOMINATIM_BASE_URL}/search", service="Nominatim geocoder",
+        "GET",
+        f"{settings.NOMINATIM_BASE_URL}/search",
+        service="Nominatim geocoder",
         params={"q": query, "format": "jsonv2", "countrycodes": "us", "limit": 1},
     )
     if status != 200 or not isinstance(payload, list):
-        raise UpstreamError("Nominatim geocoder returned an error.", service="Nominatim geocoder",
-                            upstream_status=status)
+        raise UpstreamError(
+            "Nominatim geocoder returned an error.", service="Nominatim geocoder", upstream_status=status
+        )
     if not payload:
         return None
     hit = payload[0]
@@ -147,13 +164,16 @@ def _geocode_nominatim(query: str) -> dict | None:
 
 def _geocode_ors(query: str) -> dict | None:
     status, payload = request_json(
-        "GET", f"{settings.ORS_BASE_URL}/geocode/search", service="OpenRouteService geocoder",
+        "GET",
+        f"{settings.ORS_BASE_URL}/geocode/search",
+        service="OpenRouteService geocoder",
         headers={"Authorization": settings.ORS_API_KEY},
         params={"text": query, "boundary.country": "US", "size": 1},
     )
     if status != 200 or not isinstance(payload, dict):
-        raise UpstreamError("OpenRouteService geocoder returned an error.", service="OpenRouteService geocoder",
-                            upstream_status=status)
+        raise UpstreamError(
+            "OpenRouteService geocoder returned an error.", service="OpenRouteService geocoder", upstream_status=status
+        )
     features = payload.get("features") or []
     if not features:
         return None

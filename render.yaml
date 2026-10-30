@@ -5,7 +5,7 @@ services:
     name: fuel-route-api
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: bash build.sh
     startCommand: gunicorn config.wsgi --workers 2 --preload --timeout 60 --bind 0.0.0.0:$PORT
     healthCheckPath: /api/health/
     envVars:

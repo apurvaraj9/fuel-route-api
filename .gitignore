@@ -23,3 +23,6 @@ fuel_route_cache/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Docker / local database
+*.sqlite3

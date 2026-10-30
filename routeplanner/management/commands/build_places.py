@@ -9,6 +9,7 @@ A city's location is the median of the centroids of all ZIP codes whose
 primary or "acceptable" city name is that city. This is done offline once, so
 the API never geocodes fuel stations at request time.
 """
+
 import csv
 import statistics
 from collections import defaultdict
@@ -52,12 +53,14 @@ class Command(BaseCommand):
         rows = []
         for key in sorted(set(primary) | set(alias)):
             points = primary.get(key) or alias[key]
-            rows.append({
-                "city": display[key],
-                "state": key[1],
-                "lat": round(statistics.median(p[0] for p in points), 5),
-                "lon": round(statistics.median(p[1] for p in points), 5),
-            })
+            rows.append(
+                {
+                    "city": display[key],
+                    "state": key[1],
+                    "lat": round(statistics.median(p[0] for p in points), 5),
+                    "lon": round(statistics.median(p[1] for p in points), 5),
+                }
+            )
 
         output = Path(options["output"])
         output.parent.mkdir(parents=True, exist_ok=True)

@@ -3,6 +3,7 @@
 Every outbound call goes through `request_json`, which applies timeouts and a
 User-Agent, and turns network failures into domain errors.
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,14 +42,21 @@ def request_json(method: str, url: str, *, service: str, **kwargs):
             retry_after=response.headers.get("Retry-After"),
         )
     if response.status_code in (401, 403):
-        raise UpstreamError(f"{service} rejected the request (check the API key).", service=service,
-                            upstream_status=response.status_code)
+        raise UpstreamError(
+            f"{service} rejected the request (check the API key).",
+            service=service,
+            upstream_status=response.status_code,
+        )
     if response.status_code >= 500:
-        raise UpstreamError(f"{service} is currently unavailable (HTTP {response.status_code}).",
-                            service=service, upstream_status=response.status_code)
+        raise UpstreamError(
+            f"{service} is currently unavailable (HTTP {response.status_code}).",
+            service=service,
+            upstream_status=response.status_code,
+        )
     try:
         payload = response.json()
     except ValueError as exc:
-        raise UpstreamError(f"{service} returned an invalid response.", service=service,
-                            upstream_status=response.status_code) from exc
+        raise UpstreamError(
+            f"{service} returned an invalid response.", service=service, upstream_status=response.status_code
+        ) from exc
     return response.status_code, payload

@@ -1,9 +1,12 @@
 """Shared test utilities: recorded real routes and fake HTTP responses."""
+
+import io
 import json
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 import requests
+from django.core.management import call_command
 
 from routeplanner.services.geo import encode_polyline
 
@@ -12,22 +15,38 @@ FIXTURES = Path(__file__).parent / "fixtures"
 LOCMEM_CACHE = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "tests"}}
 
 
-@lru_cache(maxsize=None)
+@cache
 def recorded_routes() -> dict:
     return json.loads((FIXTURES / "recorded_routes.json").read_text())
 
 
-def osrm_payload(name: str) -> dict:
-    """An OSRM /route response built from a recorded real route."""
-    route = recorded_routes()[name]
+def osrm_payload(name: str, routes: int | None = None) -> dict:
+    """An OSRM /route response (with steps) built from recorded real routes."""
+    recorded = recorded_routes()[name]["routes"][:routes]
     return {
         "code": "Ok",
-        "routes": [{
-            "geometry": encode_polyline([tuple(p) for p in route["points"]]),
-            "distance": route["distance_m"],
-            "duration": route["duration_s"] or route["distance_m"] / 25.0,
-        }],
+        "routes": [
+            {
+                "geometry": encode_polyline([tuple(p) for p in r["points"]]),
+                "distance": r["distance_m"],
+                "duration": r["duration_s"],
+                "legs": [
+                    {
+                        "steps": [
+                            {"distance": meters, "ref": ref} if ref else {"distance": meters}
+                            for meters, ref in r["segments"]
+                        ]
+                    }
+                ],
+            }
+            for r in recorded
+        ],
     }
+
+
+def load_stations() -> None:
+    """Load the real supplied price list into the test database."""
+    call_command("load_fuel_prices", stdout=io.StringIO())
 
 
 class FakeResponse:

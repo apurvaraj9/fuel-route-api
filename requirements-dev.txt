@@ -1,3 +1,5 @@
-# Only needed to regenerate data/us_places.csv with `python manage.py build_places`.
 -r requirements.txt
+# Code style checks (also run in CI).
+ruff==0.17.3
+# Only needed to regenerate data/us_places.csv with `python manage.py build_places`.
 zipcodes==3.0.0

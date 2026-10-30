@@ -1,11 +1,15 @@
 from unittest import mock
 
-from django.test import SimpleTestCase, override_settings
 from django.core.cache import cache
+from django.test import SimpleTestCase, override_settings
 
 from routeplanner.services import http
 from routeplanner.services.errors import (
-    InvalidRequest, LocationNotFound, LocationOutsideUSA, UpstreamRateLimited, UpstreamTimeout,
+    InvalidRequest,
+    LocationNotFound,
+    LocationOutsideUSA,
+    UpstreamRateLimited,
+    UpstreamTimeout,
 )
 from routeplanner.services.geocoding import resolve_location
 
@@ -50,7 +54,13 @@ class LocalResolutionTests(SimpleTestCase):
 
     def test_non_us_region_rejected_without_geocoding(self):
         # Found in live testing: "Toronto, ON" used to be fuzzy-matched to "Toronto Court, Indianapolis".
-        for text in ("Toronto, ON", "Vancouver, BC", "Montreal, Quebec", "Monterrey, Mexico", "Calgary, Alberta, Canada"):
+        for text in (
+            "Toronto, ON",
+            "Vancouver, BC",
+            "Montreal, Quebec",
+            "Monterrey, Mexico",
+            "Calgary, Alberta, Canada",
+        ):
             with self.subTest(text=text), self.assertRaises(LocationOutsideUSA):
                 resolve_location(text, "start")
         self.assertEqual(self.http.calls, [])
@@ -101,10 +111,19 @@ class ExternalGeocoderTests(SimpleTestCase):
 
     @override_settings(ORS_API_KEY="test-key")
     def test_openrouteservice_geocoder_when_key_set(self):
-        fake = self._patch(FakeResponse(200, {"features": [{
-            "geometry": {"coordinates": [-77.0365, 38.8977]},
-            "properties": {"label": "White House, Washington, DC, USA", "country_a": "USA"},
-        }]}))
+        fake = self._patch(
+            FakeResponse(
+                200,
+                {
+                    "features": [
+                        {
+                            "geometry": {"coordinates": [-77.0365, 38.8977]},
+                            "properties": {"label": "White House, Washington, DC, USA", "country_a": "USA"},
+                        }
+                    ]
+                },
+            )
+        )
         loc, calls = resolve_location("White House", "start")
         self.assertEqual((loc.source, calls), ("openrouteservice_geocoder", 1))
         self.assertEqual(fake.calls[0]["headers"]["Authorization"], "test-key")

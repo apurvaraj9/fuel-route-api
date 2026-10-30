@@ -1,0 +1,11 @@
+# One-command local run:  docker compose up --build   ->  http://localhost:8000
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-docker-only-change-me}
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      ORS_API_KEY: ${ORS_API_KEY:-}
+    restart: unless-stopped

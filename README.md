@@ -1,20 +1,43 @@
-# Fuel Route Planner API (Django)
+# Fuel Route Planner (Django)
 
-An API that takes a start and finish location in the USA and returns:
+[![CI](https://github.com/apurvaraj9/fuel-route-api/actions/workflows/ci.yml/badge.svg)](https://github.com/apurvaraj9/fuel-route-api/actions/workflows/ci.yml)
 
-- the driving route (as a GeoJSON map and an interactive map page),
-- cost-effective fuel stops along the route for a vehicle with a **500-mile range**,
-- the **total money spent on fuel** at **10 miles per gallon**,
+Plan a driving route between two places in the USA and find the **cheapest fuel stops** along it for a truck with a
+**500-mile range** at **10 miles per gallon**, using a list of ~6,600 truck-stop prices.
 
-using the supplied fuel-price CSV and a free routing API.
+- **Web planner:** type a start and finish, see the route, the stops and the total cost on a map.
+- **REST API** (Django REST Framework) with **interactive docs** (Swagger) at `/api/docs/`.
+- **Django admin** to browse and edit stations and prices.
 
-**Live API:** <https://fuel-route-api-h6na.onrender.com/> (free Render instance: the first request after
-15 idle minutes takes about a minute while it wakes up)
+![Web planner: New York to Los Angeles with 7 fuel stops](docs/images/planner.jpg)
 
-- Example: <https://fuel-route-api-h6na.onrender.com/api/route/?start=New%20York,%20NY&finish=Los%20Angeles,%20CA>
-- Map: <https://fuel-route-api-h6na.onrender.com/api/route/map/?start=New%20York,%20NY&finish=Los%20Angeles,%20CA>
+**Live demo:** <https://fuel-route-api-h6na.onrender.com/> · API docs: <https://fuel-route-api-h6na.onrender.com/api/docs/>
+(free Render instance: the first request after 15 idle minutes takes about a minute while it wakes up)
 
-Built with **Django 6.1.2** (latest stable release at the time of writing), Python 3.12+.
+Built with Django 6.1, Django REST Framework 3.18, drf-spectacular, SQLite, Leaflet + OpenStreetMap, and the free
+OSRM routing service. Originally written for a backend coding assessment, then extended.
+
+---
+
+## What it does
+
+| | |
+|---|---|
+| **Whole-trip fuel cost** | Reports the cost of all fuel burned, not just fuel bought on the way. You choose how full the tank is at the start; that fuel is valued at local prices. |
+| **Smart refuelling** | At each stop it either fills up (where fuel is cheap) or buys just enough to reach the next stop (where it is expensive). This is provably optimal for stations along a line and verified against exhaustive search in the tests. Tiny top-ups are rounded up to 10 gallons where possible, so every stop is worth making. |
+| **Realistic station positions** | The price list only gives a city. When a station's address names a highway the route uses (`I-44, EXIT 283`), the station is placed on that highway instead of at the city centre. |
+| **Safety reserve** | Optionally never plan to have less than N miles of fuel left. |
+| **Route comparison** | One routing call returns up to 3 route options; the one with the lowest total fuel cost wins (or the fastest, if you prefer). |
+| **One external call per trip** | "City, ST" and coordinates are resolved offline; routes are cached, so repeats make zero calls. |
+| **Protected** | Per-client rate limiting, timeouts and clear error codes for every failure. |
+
+<table><tr>
+<td><img src="docs/images/planner-stops.jpg" alt="Route options and fuel stops for Chicago to Dallas"></td>
+<td><img src="docs/images/api-docs.jpg" alt="Interactive API documentation"></td>
+</tr><tr>
+<td align="center">Route options and fuel stops (Chicago → Dallas)</td>
+<td align="center">Interactive API docs at <code>/api/docs/</code></td>
+</tr></table>
 
 ---
 
@@ -23,150 +46,180 @@ Built with **Django 6.1.2** (latest stable release at the time of writing), Pyth
 ### Windows (PowerShell, e.g. the VS Code terminal)
 
 ```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
-python manage.py test
-python manage.py runserver
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py load_fuel_prices
+.\.venv\Scripts\python.exe manage.py test
+.\.venv\Scripts\python.exe manage.py runserver
 ```
 
 ### macOS / Linux
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
 cp .env.example .env
+python manage.py migrate
+python manage.py load_fuel_prices
 python manage.py test
 python manage.py runserver
 ```
 
-Then open <http://127.0.0.1:8000/api/route/?start=New%20York,%20NY&finish=Los%20Angeles,%20CA>.
+### Docker
 
-No API key is needed: by default routes come from the public OSRM server.
-A Postman collection with demo requests is in `docs/postman_collection.json` (its `baseUrl`
-variable points to the live deployment; set it to `http://127.0.0.1:8000` for a local server).
+```bash
+docker compose up --build
+```
+
+Then open <http://127.0.0.1:8000/> (planner), <http://127.0.0.1:8000/api/docs/> (API docs) or
+<http://127.0.0.1:8000/admin/> (admin; create a login with `python manage.py createsuperuser`).
+
+No API key is needed: routes come from the public OSRM server by default.
 
 ---
 
 ## API
 
-### `GET /api/route/?start=...&finish=...`  or  `POST /api/route/`
-
-```json
-{ "start": "Chicago, IL", "finish": "Dallas, TX" }
-```
-
-Accepted location formats (all must be in the USA):
-
-| Format | Example | External calls |
-|---|---|---|
-| City, state code or name | `Dallas, TX`, `Denver, Colorado` | 0 (offline gazetteer) |
-| Latitude, longitude | `32.7767,-96.7970` | 0 |
-| Anything else (address, landmark, ZIP) | `1600 Pennsylvania Ave NW, Washington, DC` | 1 geocoding call (cached) |
-
-Response (abridged; values from a test run on a recorded New York → Los Angeles route):
+### `GET /api/route/?start=...&finish=...` or `POST /api/route/`
 
 ```json
 {
-  "start":  {"query": "New York, NY", "label": "New York, NY", "lat": 40.75, "lon": -73.99, "source": "local_gazetteer"},
-  "finish": {"query": "Los Angeles, CA", "label": "Los Angeles, CA", "...": "..."},
-  "route":  {"provider": "osrm", "distance_miles": 2794.2, "duration_hours": 49.8,
-             "stations_within_corridor": 460, "corridor_miles": 10.0},
-  "fuel_plan": {
-    "vehicle": {"max_range_miles": 500.0, "mpg": 10.0, "tank_gallons": 50.0, "starting_fuel_gallons": 50.0},
-    "number_of_stops": 6,
-    "stops": [
-      {"stop_number": 1, "opis_truckstop_id": 72782, "name": "SHEETZ #791", "address": "I-76, Exit 57",
-       "city": "North Jackson", "state": "OH", "rack_id": 573,
-       "price_per_gallon": 3.0657, "route_mile": 391.2, "off_route_miles": 2.2,
-       "miles_since_previous_fuel": 393.4, "fuel_on_arrival_gallons": 10.66,
-       "gallons_purchased": 39.341, "fill": "full", "cost_usd": 120.61,
-       "location": {"lat": 41.088, "lon": -80.8623, "precision": "city"}},
-      "... 5 more stops ..."
-    ],
-    "total_gallons_purchased": 232.362,
-    "total_fuel_cost_usd": 711.53,
-    "route_miles": 2794.2, "detour_miles": 29.4, "total_miles_driven": 2823.6,
-    "fuel_used_gallons": 282.362, "fuel_left_at_destination_gallons": 0.0,
-    "note": "..."
-  },
-  "map":  {"url": "http://127.0.0.1:8000/api/route/map/?start=...&finish=...",
-           "geojson": {"type": "FeatureCollection", "features": ["route line, start, finish, fuel stops"]}},
-  "meta": {"external_api_calls": 1, "elapsed_ms": 300, "assumptions": ["..."]}
+  "start": "Chicago, IL",
+  "finish": "Dallas, TX",
+  "start_fuel_percent": 100,
+  "reserve_miles": 0,
+  "route_preference": "cheapest",
+  "alternatives": true
 }
 ```
 
-- `map.geojson` is the route and all stops as standard GeoJSON (paste it into <https://geojson.io> to view).
-- `map.url` opens the same plan as an interactive Leaflet/OpenStreetMap page. It reuses the cached
-  route, so opening it does not call the routing API again.
+| Field | Default | Meaning |
+|---|---|---|
+| `start`, `finish` | required | US location: `"City, ST"`, `"latitude,longitude"` or an address |
+| `start_fuel_percent` | `100` | Tank level at the start (10–100) |
+| `reserve_miles` | `0` | Never plan to have less than this much range left (0–200) |
+| `route_preference` | `cheapest` | `cheapest` (lowest total fuel cost) or `fastest` |
+| `alternatives` | `true` | Compare alternative routes (still one routing call) |
 
-### `GET /api/route/map/?start=...&finish=...`
-HTML map of the route with numbered fuel stops and a cost summary.
+Response (abridged; Chicago → Dallas from a test run on recorded OSRM routes):
 
-### `GET /api/health/` and `GET /`
-Health check (fuel data statistics) and a short endpoint index.
+```json
+{
+  "start": {"label": "Chicago, IL", "lat": 41.85, "lon": -87.678, "source": "local_gazetteer"},
+  "finish": {"label": "Dallas, TX", "...": "..."},
+  "route": {"provider": "osrm", "index": 1, "distance_miles": 921.7, "duration_hours": 17.2,
+            "main_highways": ["I-44", "I-55", "US-69"], "stations_considered": 191, "stations_on_highway": 101},
+  "alternatives": [
+    {"index": 0, "chosen": false, "distance_miles": 967.6, "total_fuel_cost_usd": 310.1, "number_of_stops": 2},
+    {"index": 1, "chosen": true, "distance_miles": 921.7, "total_fuel_cost_usd": 297.19, "number_of_stops": 1}
+  ],
+  "fuel_plan": {
+    "starting_fuel": {"gallons": 50.0, "price_per_gallon": 3.499, "value_usd": 174.95,
+                      "price_source": "median of 166 listed station(s) within 50 miles of the start"},
+    "stops": [{"stop_number": 1, "name": "RAPID ROBERTS #123", "address": "I-44, EXIT 80", "city": "Springfield",
+               "state": "MO", "price_per_gallon": 2.899, "route_mile": 499.8, "miles_since_previous_fuel": 499.8,
+               "fuel_on_arrival_gallons": 0.02, "gallons_purchased": 42.168, "fill": "partial", "cost_usd": 122.24,
+               "location": {"lat": 37.25, "lon": -93.293, "placement": "highway"}}],
+    "purchases_usd": 122.24,
+    "fuel_used_gallons": 92.168,
+    "fuel_left_at_destination": {"gallons": 0.0, "value_usd": 0.0},
+    "total_fuel_cost_usd": 297.19
+  },
+  "map": {"url": "https://.../?start=Chicago%2C+IL&finish=Dallas%2C+TX", "geojson": {"type": "FeatureCollection"}},
+  "meta": {"external_api_calls": 1, "routes_compared": 2, "elapsed_ms": 56, "assumptions": ["..."]}
+}
+```
+
+- **`total_fuel_cost_usd`** = starting fuel value + purchases − value of the fuel left at the destination, i.e. the cost
+  of the fuel actually burned on this trip. **`purchases_usd`** is the money paid at the stops.
+- `map.geojson` contains the chosen route, the other route options and every stop (paste it into
+  <https://geojson.io>); `map.url` opens the same plan in the web planner.
+
+Full, interactive documentation: **`/api/docs/`** (OpenAPI schema at `/api/schema/`).
+
+### Other endpoints
+
+| Endpoint | |
+|---|---|
+| `GET /` | Web planner |
+| `GET /api/` | Endpoint index |
+| `GET /api/health/` | Status and fuel-data summary (last import) |
+| `/admin/` | Django admin: stations, prices, import history |
 
 ### Errors
 
-Errors return `{"error": {"code": "...", "message": "...", "details": {...}}}`:
+Every error is `{"error": {"code": "...", "message": "...", "details": {...}}}`:
 
 | Status | Code | When |
 |---|---|---|
-| 400 | `invalid_request` | missing/blank/too long input, bad JSON, bad coordinates, same start and finish |
-| 422 | `location_not_found` / `location_outside_usa` | location cannot be found in the USA, or is outside it (coordinates, or "City, ON"-style non-US regions) |
+| 400 | `invalid_request` | missing/blank field, bad JSON, out-of-range option, same start and finish |
+| 422 | `location_not_found` / `location_outside_usa` | location cannot be found in the USA |
 | 422 | `no_route_found` | no drivable route (e.g. to Hawaii) |
 | 422 | `no_feasible_fuel_plan` | no listed station within range somewhere on the route |
+| 429 | `rate_limited` | too many requests from this client (`ROUTE_RATE_LIMIT`, default 30/min) |
 | 502 | `upstream_error` | routing/geocoding service failed or returned bad data |
-| 503 | `upstream_rate_limited` | free API rate limit hit (`Retry-After` is passed through) |
+| 503 | `upstream_rate_limited` | the free routing service's rate limit was hit |
 | 504 | `upstream_timeout` | routing/geocoding service timed out |
-| 503 | `fuel_data_unavailable` | fuel price CSV missing or unusable (checked before any external call) |
-
-A fuel cost is only returned when a real route and a feasible plan exist.
+| 503 | `fuel_data_unavailable` | stations not loaded (checked before any external call) |
 
 ---
 
 ## How it works
 
-1. **Locations** are resolved offline when possible (`data/us_places.csv`, ~39k US city centroids
-   derived from public ZIP-code centroids). Only free-form addresses use a geocoder.
-2. **Route**: one call to the routing API with the full route geometry.
-   - Default: public [OSRM](https://project-osrm.org/) server (free, no key).
-   - If `ORS_API_KEY` is set: [OpenRouteService](https://openrouteservice.org/) (free key).
-   - Responses are cached (24 h), so repeated requests and the map page make no extra calls.
-   - **Typical request: exactly 1 external API call** (`meta.external_api_calls`).
-3. **Stations on the route**: the supplied CSV has no coordinates, so each station is placed at the
-   centre of its city. Stations within `ROUTE_CORRIDOR_MILES` (10) of the route are candidates; each one
-   gets its position along the route and its distance off the route. A grid index keeps this to a few
-   milliseconds.
-4. **Fuel plan** (`routeplanner/services/optimizer.py`): dynamic programming over the candidate stations.
-   - Starts with a full tank (500 miles); no leg may exceed 500 miles, **including the detour** to and from
-     an off-route station.
-   - At each stop the tank is filled; the last stop buys only what is needed to reach the destination.
-   - Minimises total fuel cost; a small per-stop penalty (`FUEL_STOP_PENALTY_USD`, default $5, never added
-     to the reported cost) stops it from adding a stop just to save a few cents.
-   - If no plan can keep every leg within range, it returns `no_feasible_fuel_plan` with the gap location.
-   - Tests check it against brute force on random routes.
-5. **Cost** = Σ gallons bought × that station's retail price (10 MPG).
+```mermaid
+flowchart LR
+    A[Request: start, finish, options] --> B{Validate<br/>DRF serializer}
+    B --> C[Resolve locations<br/>offline gazetteer · coordinates<br/>or geocoder for addresses]
+    C --> D[(Cache)]
+    D -- miss --> E[OSRM / OpenRouteService<br/>1 call: up to 3 routes<br/>+ highway names]
+    D -- hit --> F
+    E --> F[For each route option]
+    F --> G[Stations near the route<br/>grid index over SQLite stations<br/>placed on the named highway<br/>or at the city centre]
+    G --> H[Optimizer<br/>fill up or buy just enough<br/>range, reserve, detours]
+    H --> I[Choose cheapest<br/>or fastest route]
+    I --> J[JSON + GeoJSON + map link]
+```
 
-Processing time after the route is received is about 0.3 s for a coast-to-coast route.
+1. **Locations**: `"City, ST"` and coordinates are resolved from `data/us_places.csv` (~39k US city centroids from
+   public ZIP-code data). Only free-form addresses use a geocoder (Nominatim, or OpenRouteService with a key).
+2. **Routes**: one call to OSRM (or OpenRouteService if `ORS_API_KEY` is set) returns the route options with full
+   geometry and step-by-step road references (`I 80; US 6`). Cached for 24 h.
+3. **Stations on the route** (`services/planner.py`): stations are loaded from the database into an in-memory grid
+   index (rebuilt automatically when the table changes, e.g. after an admin edit). A station whose address names a
+   highway the route uses is placed on that highway where it passes closest to the station's city (within
+   `HIGHWAY_SNAP_MILES`, 20 for interstates and 10 for other roads). Otherwise the station stays at its city centre
+   and must be within `ROUTE_CORRIDOR_MILES` (10); the detour there and back counts against range and fuel.
+4. **Fuel plan** (`services/optimizer.py`): dynamic programming over (station, fuel on arrival). In an optimal plan
+   every stop either fills the tank or buys just enough for the next leg (Khuller, Malekian & Mestre, *To fill or not
+   to fill*, 2007), so fuel on arrival is either the reserve or "full tank minus the last leg": O(k) states per
+   station, O(log k) per transition. A per-stop penalty (`FUEL_STOP_PENALTY_USD`, $15, never added to any reported
+   cost) avoids extra stops that save only cents, and a top-up smaller than `MIN_PURCHASE_GALLONS` (10) is rounded up
+   by moving fuel from the next stop (legs and final fuel unchanged, a few cents more). Infeasible routes report where
+   the gap is.
+5. **Route choice**: every route option gets a full plan; the cheapest total fuel cost wins (or the fastest).
 
-### Data handling (supplied CSV, kept unmodified in `data/`)
+A coast-to-coast request takes roughly 0.1–0.3 s of processing after the route arrives.
 
-- 8,151 rows; 620 rows are Canadian provinces and are excluded (the trip is within the USA, and those
-  prices may use a different currency/unit).
-- 6,626 unique US station IDs; some IDs are listed several times with different prices, and the lowest
-  listed price is used for that station.
-- All 6,626 US stations are matched to a city location.
+### Data handling
+
+The supplied price list (`data/fuel-prices-for-be-assessment.csv`, unchanged) is loaded with
+`python manage.py load_fuel_prices` (re-run it with a newer file to update prices; stations are matched by OPIS ID).
+
+- 8,151 rows; 620 rows in Canadian provinces are excluded (trips are within the USA; those prices may use another
+  currency/unit).
+- 6,626 unique US stations; when an ID is listed several times with different prices, the lowest price is used.
+- All 6,626 stations are matched to a city location; over 6,000 addresses name at least one highway.
+- Invalid prices are skipped and counted, never guessed. Each import is recorded (see admin → Fuel price imports).
 
 ### Assumptions and limitations
 
-- Vehicle starts with a full tank; the reported total is the fuel bought along the way. A trip under
-  500 miles therefore needs no stop and costs $0 in purchases (the response says so).
-- Station positions are city-level, not exact pump locations; markers show the city centre.
+- Station positions are approximate: on the named highway nearest the city, or at the city centre.
 - Off-route distance is straight-line, not road distance.
-- Routing uses a car profile from a free public service, so availability depends on that service.
+- Starting fuel and fuel left at the destination are valued at local/last-paid prices (the response says which).
+- Routing uses a car profile from a free public service, so availability depends on that service. OpenRouteService
+  only offers alternative routes for trips under 100 km.
 
 ---
 
@@ -174,69 +227,78 @@ Processing time after the route is received is about 0.3 s for a coast-to-coast 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DJANGO_SECRET_KEY` | — (required when `DJANGO_DEBUG` is false) | Django secret key |
+| `DJANGO_SECRET_KEY` | — (required unless `DJANGO_DEBUG=True`) | Django secret key |
 | `DJANGO_DEBUG` | `False` | Debug mode for local development |
-| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated host names |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | empty | Only needed for browser form posts |
-| `DJANGO_SECURE_PROXY_SSL_HEADER` | `False` | Set `True` behind an HTTPS proxy |
+| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated host names (Render's host is added automatically) |
+| `DATABASE_PATH` | `db.sqlite3` | SQLite file location |
 | `ORS_API_KEY` | empty | Use OpenRouteService instead of OSRM |
-| `ROUTE_CORRIDOR_MILES` | `10` | Max distance of a station from the route (keep ≤ 20) |
-| `FUEL_STOP_PENALTY_USD` | `5` | Per-stop penalty used only to choose the plan |
+| `ROUTE_ALTERNATIVES` | `3` | Route options to request |
+| `ROUTE_CORRIDOR_MILES` | `10` | Max distance of a city-placed station from the route |
+| `HIGHWAY_SNAP_MILES` | `20` | Max distance from a station's city to its highway on the route |
+| `FUEL_STOP_PENALTY_USD` | `15` | Per-stop penalty used only to choose the plan |
+| `MIN_PURCHASE_GALLONS` | `10` | Round tiny top-ups up to this many gallons (0 = exact cheapest plan) |
+| `ROUTE_RATE_LIMIT` | `30/min` | Per-client limit on `/api/route/` |
+| `NUM_PROXIES` | unset | Proxies in front of the app, for correct client IPs in rate limiting |
 | `HTTP_CONNECT_TIMEOUT_SECONDS` / `HTTP_READ_TIMEOUT_SECONDS` | `5` / `20` | External API timeouts |
-| `HTTP_USER_AGENT` | project name | Identifies the app to OSRM/Nominatim (their usage policies require it) |
-| `CACHE_DIR` | system temp dir | File cache for API responses |
+| `HTTP_USER_AGENT` | project name + URL | Identifies the app to OSRM/Nominatim (their policies require it) |
+| `DJANGO_SUPERUSER_USERNAME` / `_EMAIL` / `_PASSWORD` | unset | If all set, `build.sh` creates an admin user |
 
 Secrets live only in `.env` (git-ignored) or the host's environment settings.
 
-## Deploying (Render free web service)
+---
 
-1. Push this repository to GitHub.
-2. In Render: **New → Web Service**, connect the repository, choose the **Free** instance type, and set:
-   - Build command: `pip install -r requirements.txt`
-   - Start command: `gunicorn config.wsgi --workers 2 --preload --timeout 60 --bind 0.0.0.0:$PORT`
-   - Health check path: `/api/health/`
-   - Environment variables: `DJANGO_SECRET_KEY` (a long random value), `DJANGO_DEBUG=False`,
-     `PYTHON_VERSION=3.12.3`, optionally `ORS_API_KEY`.
-   (`render.yaml` contains the same settings as a Blueprint.)
-3. The public host name is picked up automatically from Render's `RENDER_EXTERNAL_HOSTNAME`, and HTTPS
-   proxy headers are trusted when it is set.
-
-The API has no database, sessions or cookies, so CSRF middleware is not used; Render terminates HTTPS.
-Free Render services sleep after 15 minutes without traffic; the first request afterwards takes about a
-minute while the service starts.
-
-## Tests
+## Development
 
 ```bash
-python manage.py test
+python manage.py test        # 78 tests
+ruff check . && ruff format --check .
 ```
 
-57 tests cover geometry, CSV loading and validation, location parsing, routing clients (OSRM and
-OpenRouteService), timeouts, rate limits, invalid responses, the optimizer (range limit, detours,
-reachability, brute-force optimality), and the API end to end. Tests never call external services:
-routing responses are replaced by **real routes recorded from OSRM** (`routeplanner/tests/fixtures`).
+- **Tests** cover the optimizer (exact match with exhaustive search on 250 random instances, plus invariants with
+  detours and reserves), highway parsing, CSV import and updates, the station index, location parsing, both routing
+  clients (alternatives, failures, timeouts, rate limits, caching), the API end to end (route choice, options,
+  validation, throttling, errors), the web page, API docs and admin. External services are never called: routing
+  responses are **real routes recorded from OSRM** (`routeplanner/tests/fixtures`).
+- **CI** (GitHub Actions) runs lint, Django checks, migration and OpenAPI checks, the tests, and builds and
+  smoke-tests the Docker image on every push.
 
-## Project layout
+### Project layout
 
 ```
-config/                     Django settings, URLs, WSGI
+config/                      settings, URLs, WSGI
 routeplanner/
-  views.py                  API endpoints and map page
+  models.py                  FuelStation, FuelPriceImport
+  admin.py                   Django admin
+  serializers.py             request validation + response docs
+  views.py  api.py           API views, error format
   services/
-    data.py                 CSV + gazetteer loading
-    geocoding.py            start/finish -> coordinates
-    routing.py              OSRM / OpenRouteService client (1 call, cached)
-    geo.py                  distances, polylines, route matching
-    optimizer.py            fuel-stop dynamic programming
-    planner.py              puts it all together, builds the response
-  templates/routeplanner/map.html
-  management/commands/build_places.py   rebuilds data/us_places.csv
+    data.py                  price list parsing, gazetteer, station index
+    highways.py              highway name parsing (addresses and route steps)
+    geocoding.py             start/finish -> coordinates
+    routing.py               OSRM / OpenRouteService client (1 call, cached)
+    geo.py                   distances, polylines, route matching
+    optimizer.py             fuel-stop dynamic programming
+    planner.py               puts it together, chooses the route, builds the response
+  templates/routeplanner/planner.html   web planner (Leaflet)
+  management/commands/       load_fuel_prices, build_places
   tests/
-data/
-  fuel-prices-for-be-assessment.csv     supplied file (unchanged)
-  us_places.csv                         US city centroids
+data/                        supplied price list (unchanged) + US city centroids
 docs/postman_collection.json
+Dockerfile  docker-compose.yml  build.sh  render.yaml  .github/workflows/ci.yml
 ```
+
+## Deploying (Render free web service)
+
+1. In Render: **New → Web Service**, connect the repository, choose the **Free** instance type, and set:
+   - Build command: `bash build.sh`
+   - Start command: `gunicorn config.wsgi --workers 2 --preload --timeout 60 --bind 0.0.0.0:$PORT`
+   - Health check path: `/api/health/`
+   - Environment: `DJANGO_SECRET_KEY` (generate), `DJANGO_DEBUG=False`, `PYTHON_VERSION=3.12.3`; optionally the
+     three `DJANGO_SUPERUSER_*` variables for an admin login, and `ORS_API_KEY`.
+2. `render.yaml` contains the same settings as a Blueprint.
+
+The database is built from the CSV during each deploy. On Render's free plan the disk is not persistent, so edits made
+in the admin last until the next deploy or restart; reload a new price list by committing it and redeploying.
 
 ## Attribution
 

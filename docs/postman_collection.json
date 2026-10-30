@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Fuel Route Planner API",
-    "description": "Demo requests for the fuel route planner API. baseUrl points to the live deployment; change it to http://127.0.0.1:8000 to test a local server. The free Render instance sleeps after 15 minutes idle, so the first request can take about a minute.",
+    "name": "Fuel Route Planner API v2",
+    "description": "Demo requests for the fuel route planner API. baseUrl points to the live deployment; change it to http://127.0.0.1:8000 for a local server. Interactive docs: {{baseUrl}}/api/docs/. The free Render instance sleeps after 15 minutes idle, so the first request can take about a minute.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,9 +12,15 @@
   ],
   "item": [
     {
-      "name": "1. Long route: New York -> Los Angeles (multiple stops)",
+      "name": "1. Long route: New York -> Los Angeles",
       "request": {
         "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=New York, NY&finish=Los Angeles, CA",
           "host": [
@@ -39,7 +45,7 @@
       }
     },
     {
-      "name": "2. Medium route (POST JSON): Chicago -> Dallas",
+      "name": "2. POST JSON: Chicago -> Dallas (compares 2 route options)",
       "request": {
         "method": "POST",
         "header": [
@@ -66,9 +72,79 @@
       }
     },
     {
-      "name": "3. Short route: New York -> Philadelphia (no stop needed)",
+      "name": "3. Options: quarter tank, 50-mile reserve",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"Chicago, IL\",\n  \"finish\": \"Dallas, TX\",\n  \"start_fuel_percent\": 25,\n  \"reserve_miles\": 50\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/route/",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. Fastest route instead of cheapest",
       "request": {
         "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/route/?start=Chicago, IL&finish=Dallas, TX&route_preference=fastest",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "route",
+            ""
+          ],
+          "query": [
+            {
+              "key": "start",
+              "value": "Chicago, IL"
+            },
+            {
+              "key": "finish",
+              "value": "Dallas, TX"
+            },
+            {
+              "key": "route_preference",
+              "value": "fastest"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Short route: New York -> Philadelphia (no stop needed)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=New York, NY&finish=Philadelphia, PA",
           "host": [
@@ -93,9 +169,15 @@
       }
     },
     {
-      "name": "4. Coordinates input: Houston -> Denver",
+      "name": "6. Coordinates input: Houston -> Denver",
       "request": {
         "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": {
           "raw": "{{baseUrl}}/api/route/?start=29.7604,-95.3698&finish=39.7392,-104.9903",
           "host": [
@@ -120,11 +202,17 @@
       }
     },
     {
-      "name": "5. Error: location outside the USA",
+      "name": "7. Error: location outside the USA",
       "request": {
         "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": {
-          "raw": "{{baseUrl}}/api/route/?start=48.8566,2.3522&finish=Dallas, TX",
+          "raw": "{{baseUrl}}/api/route/?start=Toronto, ON&finish=Dallas, TX",
           "host": [
             "{{baseUrl}}"
           ],
@@ -136,7 +224,7 @@
           "query": [
             {
               "key": "start",
-              "value": "48.8566,2.3522"
+              "value": "Toronto, ON"
             },
             {
               "key": "finish",
@@ -147,11 +235,17 @@
       }
     },
     {
-      "name": "6. Error: missing finish",
+      "name": "8. Error: invalid option",
       "request": {
         "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": {
-          "raw": "{{baseUrl}}/api/route/?start=Dallas, TX",
+          "raw": "{{baseUrl}}/api/route/?start=Dallas, TX&finish=Denver, CO&start_fuel_percent=5",
           "host": [
             "{{baseUrl}}"
           ],
@@ -164,36 +258,40 @@
             {
               "key": "start",
               "value": "Dallas, TX"
+            },
+            {
+              "key": "finish",
+              "value": "Denver, CO"
+            },
+            {
+              "key": "start_fuel_percent",
+              "value": "5"
             }
           ]
         }
       }
     },
     {
-      "name": "7. Map page (open the URL in a browser)",
+      "name": "9. Health and fuel data",
       "request": {
         "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
         "url": {
-          "raw": "{{baseUrl}}/api/route/map/?start=New York, NY&finish=Los Angeles, CA",
+          "raw": "{{baseUrl}}/api/health/",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
             "api",
-            "route",
-            "map",
+            "health",
             ""
           ],
-          "query": [
-            {
-              "key": "start",
-              "value": "New York, NY"
-            },
-            {
-              "key": "finish",
-              "value": "Los Angeles, CA"
-            }
-          ]
+          "query": []
         }
       }
     }

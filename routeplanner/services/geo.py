@@ -1,4 +1,5 @@
 """Small geometry helpers: distances, polyline decoding, route-to-point matching."""
+
 from __future__ import annotations
 
 import math
@@ -94,13 +95,15 @@ def simplify(coords: list[tuple[float, float]], tolerance_deg: float) -> list[tu
             keep[best_i] = True
             stack.append((start, best_i))
             stack.append((best_i, end))
-    return [c for c, k in zip(coords, keep) if k]
+    return [c for c, k in zip(coords, keep, strict=True) if k]
 
 
 @dataclass(frozen=True)
 class RouteMatch:
     route_mile: float  # distance along the route of the closest route point
     off_route_miles: float  # straight-line distance from the point to the route
+    lat: float = 0.0  # the matched route point
+    lon: float = 0.0
 
 
 class RouteLine:
@@ -114,8 +117,14 @@ class RouteLine:
 
     CELL_DEG = 0.1  # ~7 x 5 mile cells
 
-    def __init__(self, coords: list[tuple[float, float]], total_miles: float | None = None,
-                 min_spacing_miles: float = 0.25):
+    def __init__(
+        self,
+        coords: list[tuple[float, float]],
+        total_miles: float | None = None,
+        min_spacing_miles: float = 0.25,
+        segments: list[tuple[float, frozenset[str]]] | None = None,
+    ):
+        """`segments`: consecutive (length_miles, highway refs) pieces of the route, in order."""
         if len(coords) < 2:
             raise ValueError("A route needs at least two points")
         points = [coords[0]]
@@ -143,16 +152,37 @@ class RouteLine:
         for i, (lat, lon) in enumerate(points):
             self._grid[self._cell(lat, lon)].append(i)
 
+        # Highway refs at each vertex (from the routing service's step list).
+        self.vertex_refs: list[frozenset[str]] = [frozenset()] * len(points)
+        self.refs: frozenset[str] = frozenset()
+        if segments:
+            seg_total = sum(length for length, _ in segments) or 1.0
+            seg_scale = self.length_miles / seg_total
+            ends, refs, acc = [], [], 0.0
+            for length, seg_refs in segments:
+                acc += length * seg_scale
+                ends.append(acc)
+                refs.append(seg_refs)
+            k = 0
+            for i, mile in enumerate(self.cumulative):
+                while k < len(ends) - 1 and mile > ends[k]:
+                    k += 1
+                self.vertex_refs[i] = refs[k]
+            self.refs = frozenset().union(*refs)
+
     @classmethod
     def _cell(cls, lat: float, lon: float) -> tuple[int, int]:
         return (math.floor(lat / cls.CELL_DEG), math.floor(lon / cls.CELL_DEG))
 
-    def match(self, lat: float, lon: float, max_miles: float) -> RouteMatch | None:
+    def match(
+        self, lat: float, lon: float, max_miles: float, on_highways: frozenset[str] | set[str] | None = None
+    ) -> RouteMatch | None:
         """Closest route vertex to (lat, lon) if it is within `max_miles`.
 
-        Candidate vertices come from the surrounding grid cells; they are
-        compared with a cheap flat-earth distance and only the winner gets an
-        exact haversine distance.
+        With `on_highways`, only vertices where the route is on one of those
+        highways count. Candidate vertices come from the surrounding grid cells;
+        they are compared with a cheap flat-earth distance and only the winner
+        gets an exact haversine distance.
         """
         cos_lat = max(math.cos(math.radians(lat)), 0.2)
         pad_lat = math.ceil(max_miles / (self.CELL_DEG * MILES_PER_DEG_LAT))
@@ -163,6 +193,8 @@ class RouteLine:
         for dy in range(-pad_lat, pad_lat + 1):
             for dx in range(-pad_lon, pad_lon + 1):
                 for i in self._grid.get((cy + dy, cx + dx), ()):
+                    if on_highways is not None and not (self.vertex_refs[i] & on_highways):
+                        continue
                     plat, plon = points[i]
                     d2 = (plat - lat) ** 2 + ((plon - lon) * cos_lat) ** 2
                     if d2 < best_d2:
@@ -172,4 +204,4 @@ class RouteLine:
         distance = haversine_miles(lat, lon, *points[best_i])
         if distance > max_miles:
             return None
-        return RouteMatch(route_mile=self.cumulative[best_i], off_route_miles=distance)
+        return RouteMatch(self.cumulative[best_i], distance, *points[best_i])

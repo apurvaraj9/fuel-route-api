@@ -1,96 +1,139 @@
-import json
-import logging
 from urllib.parse import urlencode
 
-from django.http import JsonResponse
+from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_http_methods
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers
+from rest_framework.decorators import api_view, throttle_classes
+from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 
-from .services.errors import InvalidRequest, PlannerError
-from .services.planner import plan_trip
+from .serializers import ErrorSerializer, RoutePlanSerializer, RouteRequestSerializer
+from .services.data import get_stations
+from .services.planner import TripOptions, plan_trip
 
-logger = logging.getLogger(__name__)
-
-
-def _error_response(error: PlannerError) -> JsonResponse:
-    response = JsonResponse({"error": error.as_dict()}, status=error.status)
-    retry_after = error.details.get("retry_after")
-    if retry_after:
-        response["Retry-After"] = retry_after
-    return response
-
-
-def _read_params(request) -> tuple[str, str]:
-    if request.method == "POST":
-        try:
-            body = json.loads(request.body or b"{}")
-        except (ValueError, UnicodeDecodeError):
-            raise InvalidRequest("Request body must be valid JSON, e.g. {\"start\": \"Dallas, TX\", \"finish\": \"Denver, CO\"}.")
-        if not isinstance(body, dict):
-            raise InvalidRequest("Request body must be a JSON object with 'start' and 'finish'.")
-        return body.get("start"), body.get("finish")
-    return request.GET.get("start"), request.GET.get("finish")
+ERROR_RESPONSES = {
+    400: OpenApiResponse(ErrorSerializer, description="Invalid input (missing field, bad JSON, out-of-range option)."),
+    422: OpenApiResponse(
+        ErrorSerializer,
+        description="Location not found / outside the USA, no drivable route, or no feasible refuelling plan.",
+    ),
+    429: OpenApiResponse(ErrorSerializer, description="Rate limit for this client exceeded."),
+    502: OpenApiResponse(ErrorSerializer, description="The routing/geocoding service failed."),
+    503: OpenApiResponse(ErrorSerializer, description="Routing service rate limit, or fuel data not loaded."),
+    504: OpenApiResponse(ErrorSerializer, description="The routing/geocoding service timed out."),
+}
 
 
-def _plan(request):
-    start, finish = _read_params(request)
-    result = plan_trip(start, finish)
-    query = urlencode({"start": start, "finish": finish})
-    result["map"]["url"] = request.build_absolute_uri(f"{reverse('route-map')}?{query}")
-    return result
+class RouteView(APIView):
+    """Plan a route between two US locations with the cheapest fuel stops."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "route"
+
+    @extend_schema(
+        summary="Plan a route with fuel stops (query parameters)",
+        parameters=[RouteRequestSerializer],
+        responses={200: RoutePlanSerializer, **ERROR_RESPONSES},
+    )
+    def get(self, request):
+        return self._plan(request, request.query_params)
+
+    @extend_schema(
+        summary="Plan a route with fuel stops (JSON body)",
+        request=RouteRequestSerializer,
+        responses={200: RoutePlanSerializer, **ERROR_RESPONSES},
+        examples=[
+            OpenApiExample(
+                "Chicago to Dallas", value={"start": "Chicago, IL", "finish": "Dallas, TX"}, request_only=True
+            ),
+            OpenApiExample(
+                "Half tank, 50-mile reserve",
+                request_only=True,
+                value={
+                    "start": "New York, NY",
+                    "finish": "Los Angeles, CA",
+                    "start_fuel_percent": 50,
+                    "reserve_miles": 50,
+                },
+            ),
+        ],
+    )
+    def post(self, request):
+        return self._plan(request, request.data)
+
+    def _plan(self, request, data):
+        serializer = RouteRequestSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        options = TripOptions(
+            start_fuel_percent=values["start_fuel_percent"],
+            reserve_miles=values["reserve_miles"],
+            route_preference=values["route_preference"],
+            alternatives=values["alternatives"],
+        )
+        result = plan_trip(values["start"], values["finish"], options)
+        result["map"]["url"] = request.build_absolute_uri(reverse("planner") + "?" + urlencode(_page_params(values)))
+        return Response(result)
 
 
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def route_view(request):
-    """Plan a route with fuel stops. GET ?start=..&finish=..  or  POST {"start": .., "finish": ..}."""
-    try:
-        return JsonResponse(_plan(request), json_dumps_params={"indent": 2})
-    except PlannerError as error:
-        return _error_response(error)
-    except Exception:  # pragma: no cover - last-resort safety net
-        logger.exception("Unexpected error while planning a route")
-        return JsonResponse({"error": {"code": "internal_error", "message": "Unexpected server error."}}, status=500)
+def _page_params(values) -> dict:
+    params = {"start": values["start"], "finish": values["finish"]}
+    if values.get("start_fuel_percent", 100) != 100:
+        params["start_fuel_percent"] = f"{values['start_fuel_percent']:g}"
+    if values.get("reserve_miles", 0):
+        params["reserve_miles"] = f"{values['reserve_miles']:g}"
+    if values.get("route_preference", "cheapest") != "cheapest":
+        params["route_preference"] = values["route_preference"]
+    return params
 
 
-@require_GET
-def route_map_view(request):
-    """The same plan rendered as an interactive map (Leaflet + OpenStreetMap tiles)."""
-    try:
-        result = _plan(request)
-    except PlannerError as error:
-        return render(request, "routeplanner/map.html", {"error": error.as_dict()}, status=error.status)
-    return render(request, "routeplanner/map.html", {"plan": result})
-
-
-@require_GET
-def index_view(request):
-    base = request.build_absolute_uri("/").rstrip("/")
-    example = urlencode({"start": "New York, NY", "finish": "Los Angeles, CA"})
-    return JsonResponse({
-        "service": "Fuel route planner API",
-        "endpoints": {
-            "plan_route": {
-                "method": "GET or POST",
-                "url": f"{base}{reverse('route')}",
-                "params": {"start": "US location: \"City, ST\", \"lat,lon\" or an address",
-                           "finish": "US location"},
-                "example": f"{base}{reverse('route')}?{example}",
-            },
-            "route_map": {"method": "GET", "url": f"{base}{reverse('route-map')}?{example}"},
-            "health": f"{base}{reverse('health')}",
-        },
-    }, json_dumps_params={"indent": 2})
-
-
-@require_GET
+@extend_schema(
+    summary="Service status and fuel data summary",
+    responses={
+        200: inline_serializer("Health", {"status": serializers.CharField(), "fuel_data": serializers.DictField()}),
+        503: OpenApiResponse(ErrorSerializer, description="Fuel data not loaded."),
+    },
+)
+@api_view(["GET"])
+@throttle_classes([])
 def health_view(request):
-    from .services.data import get_stations
+    stats = get_stations().stats
+    return Response({"status": "ok", "fuel_data": stats})
 
-    try:
-        stats = get_stations().stats
-    except PlannerError as error:
-        return _error_response(error)
-    return JsonResponse({"status": "ok", "fuel_data": stats})
+
+@extend_schema(exclude=True)
+@api_view(["GET"])
+def api_index_view(request):
+    example = urlencode({"start": "New York, NY", "finish": "Los Angeles, CA"})
+    url = request.build_absolute_uri
+    return Response(
+        {
+            "service": "Fuel Route Planner API",
+            "endpoints": {
+                "plan_route": {
+                    "method": "GET or POST",
+                    "url": url(reverse("route")),
+                    "example": url(reverse("route")) + "?" + example,
+                },
+                "docs": url(reverse("swagger-ui")),
+                "openapi_schema": url(reverse("schema")),
+                "web_planner": url(reverse("planner")),
+                "health": url(reverse("health")),
+                "admin": url(reverse("admin:index")),
+            },
+        }
+    )
+
+
+def planner_view(request):
+    """The interactive planner page (form + map). It calls the JSON API from the browser."""
+    return render(request, "routeplanner/planner.html")
+
+
+def legacy_map_view(request):
+    """v1 map URL: forwards to the planner page with the same query string."""
+    query = request.META.get("QUERY_STRING", "")
+    return HttpResponseRedirect(reverse("planner") + (f"?{query}" if query else ""))

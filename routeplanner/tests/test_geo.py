@@ -33,3 +33,16 @@ class GeoTests(SimpleTestCase):
         self.assertAlmostEqual(match.route_mile, 30.0, delta=1.0)
         self.assertAlmostEqual(match.off_route_miles, 3.45, delta=0.2)
         self.assertIsNone(line.match(40.5, -99.5, max_miles=10))  # ~35 miles away
+
+    def test_route_line_highway_refs(self):
+        # 40 miles east on "I-80", then 40 miles on "US-6".
+        coords = [(41.0, -100.0 + i * 0.01) for i in range(150)]
+        line = RouteLine(coords, segments=[(40.0, frozenset({"I-80"})), (40.0, frozenset({"US-6"}))])
+        self.assertEqual(line.refs, {"I-80", "US-6"})
+        self.assertEqual(line.vertex_refs[0], {"I-80"})
+        self.assertEqual(line.vertex_refs[-1], {"US-6"})
+        # A point near the far end only matches the I-80 part when restricted to I-80.
+        any_road = line.match(41.02, -98.52, max_miles=20)
+        on_i80 = line.match(41.02, -98.52, max_miles=60, on_highways=frozenset({"I-80"}))
+        self.assertGreater(any_road.route_mile, on_i80.route_mile)
+        self.assertIsNone(line.match(41.02, -98.52, max_miles=60, on_highways=frozenset({"I-35"})))
